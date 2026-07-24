@@ -46,7 +46,16 @@ final class AlarmKitEscalationCoordinator: AlarmEscalationCoordinating {
         case .authorized:
             return
         case .notDetermined:
-            let state = try await manager.requestAuthorization()
+            // The daemon can reject the authorization request itself with an
+            // opaque NSError (com.apple.AlarmKit.Alarm error 1) — e.g. stuck
+            // permission state or simulator. Treat any throw as not authorized
+            // so the user sees an actionable message instead of the raw error.
+            let state: AlarmManager.AuthorizationState
+            do {
+                state = try await manager.requestAuthorization()
+            } catch {
+                throw EscalationError.notAuthorized
+            }
             guard state == .authorized else { throw EscalationError.notAuthorized }
         case .denied:
             throw EscalationError.notAuthorized

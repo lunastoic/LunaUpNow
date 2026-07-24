@@ -8,12 +8,20 @@
 //
 
 import SwiftUI
+import UserNotifications
+#if canImport(AlarmKit)
+import AlarmKit
+#endif
 
 struct SettingsView: View {
     @Environment(WakeGuardController.self) private var controller
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.openURL) private var openURL
     @State private var devPreset: WakeGuardModePreset = .heavySleeper
     @State private var failScheduling = false
     @State private var showDevTools = false
+    @State private var alarmPermission: PermissionState = .unknown
+    @State private var notificationPermission: PermissionState = .unknown
 
     var body: some View {
         NavigationStack {
@@ -23,6 +31,7 @@ struct SettingsView: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
 
+                    profileCard
                     modesCard
                     difficultyCard
                     howItWorksCard
@@ -38,6 +47,164 @@ struct SettingsView: View {
             .toolbarBackground(Theme.background, for: .navigationBar)
         }
         .tint(Theme.accent)
+        .task { await refreshPermissions() }
+        .onChange(of: scenePhase) { _, phase in
+            // Refresh after the user returns from the Settings app.
+            if phase == .active { Task { await refreshPermissions() } }
+        }
+    }
+
+    // MARK: - Profile
+
+    enum PermissionState {
+        case allowed, denied, notAsked, unknown
+
+        var label: String {
+            switch self {
+            case .allowed: "Allowed"
+            case .denied: "Off"
+            case .notAsked: "Not set up"
+            case .unknown: "—"
+            }
+        }
+
+        var color: Color {
+            switch self {
+            case .allowed: Theme.success
+            case .denied: Theme.danger
+            case .notAsked: Theme.warning
+            case .unknown: .secondary
+            }
+        }
+
+        var icon: String {
+            switch self {
+            case .allowed: "checkmark.circle.fill"
+            case .denied: "xmark.circle.fill"
+            case .notAsked: "questionmark.circle.fill"
+            case .unknown: "circle.dashed"
+            }
+        }
+    }
+
+    private var profileCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Your Profile")
+                .font(.headline)
+                .foregroundStyle(.white)
+            Text("Wake Guard needs both of these to get you out of bed.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            permissionRow(
+                icon: "alarm.fill",
+                title: "Alarms",
+                detail: "Rings your wake-up alarm and follow-up alerts.",
+                state: alarmPermission,
+                allow: { Task { await requestAlarmPermission() } })
+
+            permissionRow(
+                icon: "bell.badge.fill",
+                title: "Notifications",
+                detail: "Backup reminders while a wake session is active.",
+                state: notificationPermission,
+                allow: { Task { await requestNotificationPermission() } })
+
+            Divider().overlay(Theme.stroke)
+
+            HStack {
+                Label("Version", systemImage: "info.circle")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text(appVersion)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.8))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .card()
+    }
+
+    private func permissionRow(icon: String, title: String, detail: String,
+                               state: PermissionState, allow: @escaping () -> Void) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: icon)
+                    .font(.subheadline)
+                    .foregroundStyle(Theme.accent)
+                    .frame(width: 32, height: 32)
+                    .background(RoundedRectangle(cornerRadius: 10).fill(Theme.accent.opacity(0.15)))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.white)
+                    Text(detail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 8)
+                Chip(text: state.label, icon: state.icon, color: state.color, filled: true)
+            }
+
+            if state == .denied {
+                Button {
+                    if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
+                } label: {
+                    Label("Turn on in Settings", systemImage: "arrow.up.forward.app")
+                        .font(.caption.weight(.semibold))
+                }
+                .buttonStyle(.bordered)
+                .tint(Theme.accent)
+            } else if state == .notAsked {
+                Button(action: allow) {
+                    Label("Allow", systemImage: "checkmark")
+                        .font(.caption.weight(.semibold))
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Theme.accent)
+            }
+        }
+    }
+
+    private var appVersion: String {
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
+        return "\(version) (\(build))"
+    }
+
+    private func refreshPermissions() async {
+        #if canImport(AlarmKit)
+        switch AlarmManager.shared.authorizationState {
+        case .authorized: alarmPermission = .allowed
+        case .denied: alarmPermission = .denied
+        case .notDetermined: alarmPermission = .notAsked
+        @unknown default: alarmPermission = .unknown
+        }
+        #else
+        alarmPermission = .unknown
+        #endif
+
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        switch settings.authorizationStatus {
+        case .authorized, .provisional, .ephemeral: notificationPermission = .allowed
+        case .denied: notificationPermission = .denied
+        case .notDetermined: notificationPermission = .notAsked
+        @unknown default: notificationPermission = .unknown
+        }
+    }
+
+    private func requestAlarmPermission() async {
+        #if canImport(AlarmKit)
+        _ = try? await AlarmManager.shared.requestAuthorization()
+        #endif
+        await refreshPermissions()
+    }
+
+    private func requestNotificationPermission() async {
+        _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound])
+        await refreshPermissions()
     }
 
     // MARK: - Wake Guard modes
