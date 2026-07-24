@@ -86,8 +86,24 @@ final class AlarmKitEscalationCoordinator: AlarmEscalationCoordinating {
         do {
             _ = try await manager.schedule(id: alarm.id, configuration: configuration)
         } catch {
-            throw EscalationError.schedulingFailed(String(describing: error))
+            throw Self.friendlyScheduleError(error, authorizationState: manager.authorizationState)
         }
+    }
+
+    /// The daemon can reject a schedule with an opaque NSError (e.g.
+    /// "com.apple.AlarmKit.Alarm error 1") even after the app-side
+    /// authorization check passed — most commonly because alarm permission is
+    /// off. Re-check authorization and translate to something actionable.
+    static func friendlyScheduleError(_ error: Error,
+                                      authorizationState: AlarmManager.AuthorizationState) -> EscalationError {
+        if case AlarmManager.AlarmError.maximumLimitReached = error {
+            return .schedulingFailed("iOS's alarm limit was reached. Remove some alarms and try again.")
+        }
+        guard authorizationState == .authorized else { return .notAuthorized }
+        let ns = error as NSError
+        return .schedulingFailed(
+            "iOS rejected the alarm (\(ns.domain) \(ns.code)). "
+            + "Check that alarms are allowed for LunaUpNow in the Settings app, then toggle the alarm off and on.")
     }
 
     func disarmPrimary(_ alarm: AlarmConfig) async {
@@ -134,7 +150,7 @@ final class AlarmKitEscalationCoordinator: AlarmEscalationCoordinating {
                 // System alarm limit hit — stop adding, keep what we have.
                 break
             } catch {
-                throw EscalationError.schedulingFailed(String(describing: error))
+                throw Self.friendlyScheduleError(error, authorizationState: manager.authorizationState)
             }
         }
         return scheduled

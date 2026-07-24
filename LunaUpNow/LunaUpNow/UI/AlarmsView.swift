@@ -112,22 +112,18 @@ struct AlarmEditView: View {
                         .labelsHidden()
                 } header: { Text("Time") }
 
-                Section("Repeat") {
-                    HStack {
-                        ForEach(Weekday.allCases.sorted(), id: \.self) { day in
-                            let on = repeatDays.contains(day)
-                            Text(day.shortName)
-                                .font(.caption.weight(.semibold))
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 8)
-                                .background(RoundedRectangle(cornerRadius: 8)
-                                    .fill(on ? Theme.accent.opacity(0.3) : Theme.cardElevated))
-                                .foregroundStyle(on ? Theme.accentSoft : .secondary)
-                                .onTapGesture {
-                                    if on { repeatDays.remove(day) } else { repeatDays.insert(day) }
-                                }
+                Section {
+                    DayChipRow(activeDays: repeatDays) { day in
+                        if repeatDays.contains(day) {
+                            repeatDays.remove(day)
+                        } else {
+                            repeatDays.insert(day)
                         }
                     }
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets())
+                } header: { Text("Repeat") } footer: {
+                    Text("Tap a day to turn it on or off. Struck-through days are off; no days selected means the alarm rings once.")
                 }
 
                 Section {

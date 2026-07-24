@@ -109,7 +109,9 @@ struct HomeView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                dayDotRow(activeDays: next.alarm.repeatDays)
+                DayChipRow(activeDays: next.alarm.repeatDays) { day in
+                    toggleRepeatDay(day, of: next.alarm)
+                }
 
                 HStack(spacing: 12) {
                     heroInfoTile(icon: "alarm.fill",
@@ -176,21 +178,14 @@ struct HomeView: View {
         return (String(format: "%d:%02d", hour, alarm.minute), ampm)
     }
 
-    private func dayDotRow(activeDays: Set<Weekday>) -> some View {
-        HStack(spacing: 0) {
-            ForEach(Weekday.allCases.sorted(), id: \.self) { day in
-                let active = activeDays.contains(day)
-                VStack(spacing: 4) {
-                    Text(day.shortName)
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(active ? Theme.accentSoft : .secondary)
-                    Circle()
-                        .fill(active ? Theme.accent : Color.white.opacity(0.15))
-                        .frame(width: 4, height: 4)
-                }
-                .frame(maxWidth: .infinity)
-            }
+    private func toggleRepeatDay(_ day: Weekday, of alarm: AlarmConfig) {
+        var updated = alarm
+        if updated.repeatDays.contains(day) {
+            updated.repeatDays.remove(day)
+        } else {
+            updated.repeatDays.insert(day)
         }
+        controller.updateAlarm(updated)
     }
 
     // MARK: - Action buttons

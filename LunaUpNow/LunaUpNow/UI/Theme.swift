@@ -56,6 +56,62 @@ struct Chip: View {
     }
 }
 
+/// Tappable weekday chip. Enabled days pop in solid accent with dark bold
+/// text; disabled days are dimmed with a strike through the whole chip.
+struct DayChip: View {
+    let day: Weekday
+    let isOn: Bool
+    var onTap: (() -> Void)? = nil
+
+    var body: some View {
+        Text(day.shortName)
+            .font(.caption.weight(.bold))
+            .foregroundStyle(isOn ? .black : .secondary)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 9)
+            .background(RoundedRectangle(cornerRadius: 9)
+                .fill(isOn ? Theme.accent : Theme.cardElevated))
+            .overlay {
+                if !isOn {
+                    RoundedRectangle(cornerRadius: 9).stroke(Theme.stroke)
+                    DiagonalStrike()
+                        .stroke(Color.white.opacity(0.45), lineWidth: 1.5)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 7)
+                }
+            }
+            .contentShape(Rectangle())
+            .onTapGesture { onTap?() }
+            .animation(.easeOut(duration: 0.12), value: isOn)
+            .accessibilityLabel("\(day.shortName), \(isOn ? "on" : "off")")
+            .accessibilityAddTraits(onTap == nil ? [] : .isButton)
+    }
+}
+
+struct DiagonalStrike: Shape {
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        p.move(to: CGPoint(x: rect.minX, y: rect.maxY))
+        p.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        return p
+    }
+}
+
+/// Row of DayChips for all seven days, Monday first.
+struct DayChipRow: View {
+    let activeDays: Set<Weekday>
+    var onToggle: ((Weekday) -> Void)? = nil
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach(Weekday.allCases.sorted(), id: \.self) { day in
+                DayChip(day: day, isOn: activeDays.contains(day),
+                        onTap: onToggle.map { toggle in { toggle(day) } })
+            }
+        }
+    }
+}
+
 func formatDuration(_ interval: TimeInterval) -> String {
     let total = max(0, Int(interval))
     let h = total / 3600, m = (total % 3600) / 60, s = total % 60

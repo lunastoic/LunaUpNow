@@ -41,19 +41,12 @@ enum QuestionGenerator {
 
     static func question(difficulty: QuestionDifficulty, rng: inout SeededGenerator) -> Question {
         let kind = Int.random(in: 0..<3, using: &rng)
-        let (a, b): (Int, Int)
-        switch difficulty {
-        case .gentle:
-            (a, b) = (Int.random(in: 2...20, using: &rng), Int.random(in: 2...20, using: &rng))
-        case .balanced:
-            (a, b) = (Int.random(in: 11...59, using: &rng), Int.random(in: 11...59, using: &rng))
-        case .hard:
-            (a, b) = (Int.random(in: 23...99, using: &rng), Int.random(in: 23...99, using: &rng))
-        }
         switch kind {
         case 0:
+            let (a, b) = additionOperands(difficulty: difficulty, rng: &rng)
             return Question(id: uuid(&rng), prompt: "\(a) + \(b) = ?", answer: a + b)
         case 1:
+            let (a, b) = additionOperands(difficulty: difficulty, rng: &rng)
             let (hi, lo) = a >= b ? (a, b) : (b, a)
             return Question(id: uuid(&rng), prompt: "\(hi) − \(lo) = ?", answer: hi - lo)
         default:
@@ -61,6 +54,26 @@ enum QuestionGenerator {
             let m = difficulty == .hard ? Int.random(in: 6...15, using: &rng) : Int.random(in: 3...9, using: &rng)
             let n = difficulty == .gentle ? Int.random(in: 2...6, using: &rng) : Int.random(in: 4...12, using: &rng)
             return Question(id: uuid(&rng), prompt: "\(m) × \(n) = ?", answer: m * n)
+        }
+    }
+
+    /// Below `hard`, one operand is always a round number (multiple of 10) and
+    /// the other is a multiple of 5 or an even number — sums like 10 + 85 or
+    /// 34 + 20 that are solvable half-asleep. `hard` keeps arbitrary operands.
+    private static func additionOperands(difficulty: QuestionDifficulty, rng: inout SeededGenerator) -> (Int, Int) {
+        switch difficulty {
+        case .gentle:
+            let round = 10 * Int.random(in: 1...5, using: &rng)
+            let friendly = 5 * Int.random(in: 1...8, using: &rng)
+            return Bool.random(using: &rng) ? (round, friendly) : (friendly, round)
+        case .balanced:
+            let round = 10 * Int.random(in: 1...9, using: &rng)
+            let friendly = Bool.random(using: &rng)
+                ? 5 * Int.random(in: 1...19, using: &rng)   // multiple of 5, 5–95
+                : 2 * Int.random(in: 6...24, using: &rng)   // even, 12–48
+            return Bool.random(using: &rng) ? (round, friendly) : (friendly, round)
+        case .hard:
+            return (Int.random(in: 23...99, using: &rng), Int.random(in: 23...99, using: &rng))
         }
     }
 
