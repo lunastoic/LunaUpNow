@@ -225,58 +225,108 @@ struct HomeView: View {
 
     // MARK: - Quick settings
 
+    @ViewBuilder
     private var quickSettingsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Quick Settings")
                 .font(.headline)
                 .foregroundStyle(.white)
-            HStack(spacing: 10) {
-                let alarm = controller.nextAlarm?.alarm ?? controller.alarms.first
-                quickSettingsTile(icon: "questionmark.circle.fill",
-                                  label: "Questions",
-                                  value: alarm.map { "\($0.configuration.stages.first?.questionCount ?? 0)" } ?? "—")
-                quickSettingsTile(icon: "chart.bar.fill",
-                                  label: "Difficulty",
-                                  value: alarm?.difficulty.displayName ?? "—")
-                quickSettingsTile(icon: "checkmark.circle.fill",
-                                  label: "Follow-up",
-                                  value: alarm != nil ? "On" : "—")
-            }
-            .contentShape(Rectangle())
-            .onTapGesture {
-                if let alarm = controller.nextAlarm?.alarm ?? controller.alarms.first {
-                    editingAlarm = alarm
-                } else {
-                    showingNewAlarm = true
+
+            if let alarm = controller.nextAlarm?.alarm ?? controller.alarms.first {
+                HStack(spacing: 10) {
+                    quickSettingsTile(icon: modeIcon(alarm.preset),
+                                      label: "Mode",
+                                      value: alarm.preset.displayName) {
+                        cycleMode(alarm)
+                    }
+                    quickSettingsTile(icon: "chart.bar.fill",
+                                      label: "Difficulty",
+                                      value: alarm.difficulty.displayName) {
+                        cycleDifficulty(alarm)
+                    }
+                    quickSettingsTile(icon: alarm.isEnabled ? "bell.fill" : "bell.slash.fill",
+                                      label: "Alarm",
+                                      value: alarm.isEnabled ? "On" : "Off",
+                                      dimmed: !alarm.isEnabled) {
+                        controller.setAlarmEnabled(alarm, enabled: !alarm.isEnabled)
+                    }
                 }
+                Text("Tap to change. Mode sets how many questions and follow-ups you get.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            } else {
+                Button { showingNewAlarm = true } label: {
+                    HStack {
+                        Image(systemName: "plus.circle.fill")
+                            .foregroundStyle(Theme.accent)
+                        Text("Add an alarm to unlock quick settings")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                    }
+                    .padding(12)
+                    .background(RoundedRectangle(cornerRadius: 14).fill(Theme.card))
+                    .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.stroke))
+                }
+                .buttonStyle(.plain)
             }
         }
     }
 
-    private func quickSettingsTile(icon: String, label: String, value: String) -> some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 6) {
-                Image(systemName: icon)
-                    .font(.caption)
-                    .foregroundStyle(Theme.accent)
-                Text(label)
-                    .font(.caption2)
+    private func quickSettingsTile(icon: String, label: String, value: String,
+                                   dimmed: Bool = false, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack {
+                VStack(alignment: .leading, spacing: 6) {
+                    Image(systemName: icon)
+                        .font(.caption)
+                        .foregroundStyle(dimmed ? .secondary : Theme.accent)
+                    Text(label)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    Text(value)
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(dimmed ? Color.secondary : Color.white)
+                        .minimumScaleFactor(0.7)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "arrow.trianglehead.2.clockwise.rotate.90")
+                    .font(.caption2.weight(.bold))
                     .foregroundStyle(.secondary)
-                Text(value)
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(.white)
-                    .minimumScaleFactor(0.7)
-                    .lineLimit(1)
             }
-            Spacer(minLength: 0)
-            Image(systemName: "chevron.right")
-                .font(.caption2.weight(.bold))
-                .foregroundStyle(.secondary)
+            .padding(12)
+            .frame(maxWidth: .infinity)
+            .background(RoundedRectangle(cornerRadius: 14).fill(Theme.card))
+            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.stroke))
         }
-        .padding(12)
-        .frame(maxWidth: .infinity)
-        .background(RoundedRectangle(cornerRadius: 14).fill(Theme.card))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.stroke))
+        .buttonStyle(.plain)
+        .animation(.easeOut(duration: 0.15), value: value)
+        .accessibilityLabel("\(label): \(value). Tap to change.")
+    }
+
+    private func modeIcon(_ preset: WakeGuardModePreset) -> String {
+        switch preset {
+        case .standard: "sun.max.fill"
+        case .heavySleeper: "moon.zzz.fill"
+        case .nuclear: "flame.fill"
+        }
+    }
+
+    private func cycleMode(_ alarm: AlarmConfig) {
+        let all = WakeGuardModePreset.allCases
+        guard let index = all.firstIndex(of: alarm.preset) else { return }
+        var updated = alarm
+        updated.preset = all[(index + 1) % all.count]
+        controller.updateAlarm(updated)
+    }
+
+    private func cycleDifficulty(_ alarm: AlarmConfig) {
+        let all = QuestionDifficulty.allCases
+        guard let index = all.firstIndex(of: alarm.difficulty) else { return }
+        var updated = alarm
+        updated.difficulty = all[(index + 1) % all.count]
+        controller.updateAlarm(updated)
     }
 
     // MARK: - Wake stats
